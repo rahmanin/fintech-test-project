@@ -2,8 +2,9 @@
 // Inside the Nest app the runtime loads reflect-metadata first, but this
 // module also runs standalone (migrate.ts, unit tests), so import it here.
 import 'reflect-metadata';
-import { plainToInstance, Type } from 'class-transformer';
+import { Transform, plainToInstance, Type } from 'class-transformer';
 import {
+  IsBoolean,
   IsIn,
   IsInt,
   IsNotEmpty,
@@ -66,6 +67,26 @@ export class EnvConfig {
   @IsString()
   @MinLength(16)
   API_CLIENT_SECRET!: string;
+
+  /** Comma-separated list, e.g. "kafka:9092" inside Compose, "localhost:29092" from the host. */
+  @IsString()
+  @IsNotEmpty()
+  KAFKA_BROKERS: string = 'localhost:29092';
+
+  @IsString()
+  @IsNotEmpty()
+  KAFKA_TOPIC: string = 'treasury.program-capacity';
+
+  @IsString()
+  @IsNotEmpty()
+  KAFKA_CONSUMER_GROUP: string = 'capacity-service';
+
+  /** Set to false in tests and when running the API without a broker. */
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value !== 'false' : value,
+  )
+  @IsBoolean()
+  KAFKA_ENABLED: boolean = true;
 }
 
 export function validateEnv(raw: Record<string, unknown>): EnvConfig {

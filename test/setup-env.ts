@@ -2,6 +2,7 @@
 process.env.NODE_ENV ??= 'test';
 process.env.PORT ??= '3000';
 process.env.DATABASE_URL ??= 'postgres://capacity:capacity@localhost:5434/capacity_test';
+process.env.KAFKA_ENABLED ??= 'false';
 process.env.JWT_SECRET ??= 'test-jwt-secret-at-least-16-chars';
 process.env.JWT_EXPIRES_IN ??= '1h';
 process.env.API_CLIENT_ID ??= 'test-client';

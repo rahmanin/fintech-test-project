@@ -60,3 +60,19 @@ export class AmountTooSmallError extends DomainError {
     });
   }
 }
+
+/**
+ * A treasury message claims a different currency than the program we hold.
+ * Refused rather than applied: existing reservations are stored converted
+ * into the program currency, so changing it would make them meaningless.
+ */
+export class ProgramCurrencyMismatchError extends DomainError {
+  readonly code = 'PROGRAM_CURRENCY_MISMATCH';
+  constructor(programId: string, expected: string, received: string) {
+    super(`Program ${programId} is denominated in ${expected}; message says ${received}`, {
+      programId,
+      expected,
+      received,
+    });
+  }
+}

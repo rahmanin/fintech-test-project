@@ -12,7 +12,7 @@ Take-home assignment. See [`TASK.md`](./TASK.md) for the problem statement and
 | 2 | `money` + `fx` modules | — |
 | 3 | Programs and reservations domain, row locks, concurrency tests | done |
 | 4 | REST API, JWT auth, three-level validation | done |
-| 5 | Treasury Kafka consumer, reconciliation | — |
+| 5 | Treasury Kafka consumer, reconciliation | done |
 | 6 | Full README: API walk-through, Kafka examples, consistency model | — |
 
 ## Quick start
@@ -69,6 +69,54 @@ curl -s -H "Authorization: Bearer $TOKEN" "$B/programs/PRG-DEMO/reservations?sta
 ```
 
 Errors always have the shape `{ "code": "...", "message": "...", "details": {...} }`.
+
+## Treasury capacity feed (Kafka)
+
+Treasury owns program limits and publishes them to `treasury.program-capacity`.
+The service only consumes; it publishes nothing. Two message types, both
+carrying **absolute state** plus a monotonic per-program `version`:
+
+```jsonc
+// CAPACITY_UPDATED — one program, keyed by programId
+{
+  "eventId": "…", "type": "CAPACITY_UPDATED", "occurredAt": "2026-09-15T10:00:00Z",
+  "payload": { "programId": "PRG-DEMO", "version": 4, "currency": "USD", "totalLimit": "9000000.00" }
+}
+
+// PROGRAM_SNAPSHOT — bulk reconciliation, many programs, sent unkeyed
+{
+  "eventId": "…", "type": "PROGRAM_SNAPSHOT", "occurredAt": "2026-09-15T10:00:00Z",
+  "programs": [
+    { "programId": "PRG-DEMO", "version": 5, "currency": "USD", "totalLimit": "8000000.00" },
+    { "programId": "PRG-EUR",  "version": 1, "currency": "EUR", "totalLimit": "2500000.00" }
+  ]
+}
+```
+
+A snapshot carries **no invoice-level data**: TASK.md never says treasury
+knows about reservations, so "full state" means a program's currency and
+limit. A program absent from a snapshot is left untouched.
+
+Publish messages locally:
+
+```bash
+npm run treasury:publish -- update PRG-DEMO 4 9000000.00 USD
+npm run treasury:publish -- snapshot PRG-DEMO:5:8000000.00:USD PRG-EUR:1:2500000.00:EUR
+```
+
+Handling guarantees:
+
+- **Idempotent**: an entry is applied only when its `version` is newer than
+  the stored one, checked while holding the program row lock. Duplicate
+  delivery and out-of-order delivery are both no-ops.
+- **One acknowledgement per message**: a bulk snapshot is one Kafka message,
+  so the offset is committed only after every entry has been handled. Each
+  entry commits in its own transaction, and a heartbeat every 50 entries
+  keeps a long batch from triggering a rebalance.
+- **Poison-safe**: unparsable messages and permanently invalid entries are
+  logged and skipped, never retried, so one bad message cannot block a
+  partition. Database failures are treated as transient and re-thrown, which
+  leaves the offset uncommitted and the message to be redelivered.
 
 ## Local development without Docker for the app
 
