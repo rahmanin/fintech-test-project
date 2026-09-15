@@ -1,0 +1,19 @@
+# Infrastructure for integration tests: a throwaway Postgres on its own port.
+#   docker compose -f docker-compose.test.yml up -d
+#   npm run test:integration
+services:
+  postgres-test:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: capacity
+      POSTGRES_PASSWORD: capacity
+      POSTGRES_DB: capacity_test
+    ports:
+      - '${POSTGRES_TEST_HOST_PORT:-5434}:5432'
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U capacity -d capacity_test']
+      interval: 2s
+      timeout: 3s
+      retries: 15
