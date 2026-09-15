@@ -72,6 +72,7 @@ services:
       NODE_ENV: production
       PORT: 3000
       DATABASE_URL: postgres://capacity:capacity@postgres:5432/capacity
+      FX_RATES: '{"EUR/USD":"1.0800","USD/EUR":"0.9259","GBP/USD":"1.2700","USD/GBP":"0.7874","JPY/USD":"0.0067","USD/JPY":"149.25"}'
     ports:
       - '${APP_HOST_PORT:-3000}:3000'
     healthcheck:
