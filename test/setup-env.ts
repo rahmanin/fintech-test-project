@@ -2,6 +2,10 @@
 process.env.NODE_ENV ??= 'test';
 process.env.PORT ??= '3000';
 process.env.DATABASE_URL ??= 'postgres://capacity:capacity@localhost:5434/capacity_test';
+process.env.JWT_SECRET ??= 'test-jwt-secret-at-least-16-chars';
+process.env.JWT_EXPIRES_IN ??= '1h';
+process.env.API_CLIENT_ID ??= 'test-client';
+process.env.API_CLIENT_SECRET ??= 'test-client-secret-16chars';
 process.env.FX_RATES ??= JSON.stringify({
   'EUR/USD': '1.0800',
   'USD/EUR': '0.9259',

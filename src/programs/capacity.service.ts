@@ -25,12 +25,20 @@ export interface ReserveResult {
   reservation: ReservationEntity;
   /** false = idempotent replay of an existing reservation. */
   created: boolean;
+  /** Currency of reservedAmountMinor (the program's). */
+  programCurrency: string;
 }
 
 export interface ReleaseResult {
   reservation: ReservationEntity;
   /** false = it was already released. */
   changed: boolean;
+  programCurrency: string;
+}
+
+export interface ReservationList {
+  programCurrency: string;
+  reservations: ReservationEntity[];
 }
 
 export interface ProgramView {
@@ -87,7 +95,9 @@ export class CapacityService {
         const sameRequest =
           existing.invoiceAmountMinor === invoiceAmount.minor &&
           existing.invoiceCurrency === cmd.currency;
-        if (sameRequest) return { reservation: existing, created: false };
+        if (sameRequest) {
+          return { reservation: existing, created: false, programCurrency: program.currency };
+        }
         throw new IdempotencyConflictError(
           cmd.invoiceId,
           Money.fromMinor(existing.invoiceAmountMinor, existing.invoiceCurrency).format(),
@@ -125,7 +135,7 @@ export class CapacityService {
       const saved = await manager.findOneOrFail(ReservationEntity, {
         where: { programId: program.id, invoiceId: cmd.invoiceId },
       });
-      return { reservation: saved, created: true };
+      return { reservation: saved, created: true, programCurrency: program.currency };
     });
   }
 
@@ -134,19 +144,21 @@ export class CapacityService {
       // The lock is needed here too: a concurrent reserve() computes
       // SUM(active) under the same lock, so a release must not change the
       // set of active rows while that computation is in flight.
-      await this.lockProgram(manager, programId);
+      const program = await this.lockProgram(manager, programId);
 
       const reservation = await manager.findOne(ReservationEntity, {
         where: { programId, invoiceId },
       });
       if (!reservation) throw new ReservationNotFoundError(programId, invoiceId);
-      if (reservation.releasedAt !== null) return { reservation, changed: false };
+      if (reservation.releasedAt !== null) {
+        return { reservation, changed: false, programCurrency: program.currency };
+      }
 
       await manager.update(ReservationEntity, { programId, invoiceId }, { releasedAt: new Date() });
       const updated = await manager.findOneOrFail(ReservationEntity, {
         where: { programId, invoiceId },
       });
-      return { reservation: updated, changed: true };
+      return { reservation: updated, changed: true, programCurrency: program.currency };
     });
   }
 
@@ -181,15 +193,12 @@ export class CapacityService {
     };
   }
 
-  async listReservations(
-    programId: string,
-    status?: ReservationStatus,
-  ): Promise<ReservationEntity[]> {
-    const exists = await this.dataSource.manager.exists(ProgramEntity, {
+  async listReservations(programId: string, status?: ReservationStatus): Promise<ReservationList> {
+    const program = await this.dataSource.manager.findOne(ProgramEntity, {
       where: { id: programId },
     });
-    if (!exists) throw new ProgramNotFoundError(programId);
-    return this.dataSource.manager.find(ReservationEntity, {
+    if (!program) throw new ProgramNotFoundError(programId);
+    const reservations = await this.dataSource.manager.find(ReservationEntity, {
       where: {
         programId,
         ...(status === 'ACTIVE' ? { releasedAt: IsNull() } : {}),
@@ -197,6 +206,7 @@ export class CapacityService {
       },
       order: { createdAt: 'ASC', invoiceId: 'ASC' },
     });
+    return { programCurrency: program.currency, reservations };
   }
 
   /** SELECT ... FOR UPDATE on the program row; the serialisation point for all writers. */

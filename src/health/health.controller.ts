@@ -1,6 +1,7 @@
 import { Controller, Get, ServiceUnavailableException } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { DataSource } from 'typeorm';
+import { Public } from '../auth/public.decorator';
 
 /**
  * Liveness/readiness probe used by Docker Compose and by anyone checking
@@ -8,6 +9,7 @@ import { DataSource } from 'typeorm';
  * it exposes no business data.
  */
 @ApiTags('health')
+@Public()
 @Controller('health')
 export class HealthController {
   constructor(private readonly dataSource: DataSource) {}
