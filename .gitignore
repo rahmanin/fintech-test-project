@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+
+# Tests / coverage
+coverage/
+.jest-cache/
+
+# Environment / secrets (keep .env.example committed)
+.env
+.env.*
+!.env.example
+
+# Local infra state (docker volumes bound to the repo, if any)
+.data/
+tmp/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-error.log*
+
+# Editors / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
