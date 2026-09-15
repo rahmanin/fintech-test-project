@@ -4,6 +4,7 @@ const valid = {
   NODE_ENV: 'test',
   PORT: '3000',
   DATABASE_URL: 'postgres://u:p@localhost:5432/db',
+  FX_RATES: '{"EUR/USD":"1.08"}',
 };
 
 describe('validateEnv', () => {
@@ -14,13 +15,21 @@ describe('validateEnv', () => {
   });
 
   it('applies defaults for NODE_ENV and PORT', () => {
-    const cfg = validateEnv({ DATABASE_URL: valid.DATABASE_URL });
+    const cfg = validateEnv({ DATABASE_URL: valid.DATABASE_URL, FX_RATES: valid.FX_RATES });
     expect(cfg.NODE_ENV).toBe('development');
     expect(cfg.PORT).toBe(3000);
   });
 
   it('fails fast when DATABASE_URL is missing', () => {
-    expect(() => validateEnv({ NODE_ENV: 'test', PORT: '3000' })).toThrow(/DATABASE_URL/);
+    expect(() => validateEnv({ NODE_ENV: 'test', PORT: '3000', FX_RATES: '{}' })).toThrow(
+      /DATABASE_URL/,
+    );
+  });
+
+  it('fails fast when FX_RATES is missing', () => {
+    expect(() => validateEnv({ NODE_ENV: 'test', DATABASE_URL: valid.DATABASE_URL })).toThrow(
+      /FX_RATES/,
+    );
   });
 
   it('rejects a non-numeric or out-of-range PORT', () => {

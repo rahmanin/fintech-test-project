@@ -33,6 +33,11 @@ export class EnvConfig {
   @IsString()
   @IsNotEmpty()
   DATABASE_URL!: string;
+
+  /** JSON object of "FROM/TO": "rate" strings; parsed and validated by FxModule at boot. */
+  @IsString()
+  @IsNotEmpty()
+  FX_RATES!: string;
 }
 
 export function validateEnv(raw: Record<string, unknown>): EnvConfig {
