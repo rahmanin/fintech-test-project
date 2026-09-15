@@ -16,6 +16,10 @@ export default tseslint.config(
       },
     },
     rules: {
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_', ignoreRestSiblings: true },
+      ],
       // Money and FX rates are bigint / decimal strings. A float creeping in
       // through Number() or parseFloat() would silently break every amount.
       'no-restricted-syntax': [
@@ -25,6 +29,16 @@ export default tseslint.config(
           message: 'parseFloat is forbidden: money and rates must never be JS numbers.',
         },
       ],
+    },
+  },
+  {
+    // supertest response bodies are untyped by nature; asserting on them is the point of e2e tests.
+    files: ['test/**/*.ts'],
+    rules: {
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-argument': 'off',
+      '@typescript-eslint/no-unsafe-call': 'off',
     },
   },
 );

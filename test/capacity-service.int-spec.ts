@@ -158,7 +158,7 @@ describe('CapacityService (integration, real Postgres)', () => {
       ];
       await Promise.allSettled(ops);
       const view = await service.getProgram('PRG-TEST');
-      const active = await service.listReservations('PRG-TEST', 'ACTIVE');
+      const { reservations: active } = await service.listReservations('PRG-TEST', 'ACTIVE');
       const sum = active.reduce((acc, r) => acc + r.reservedAmountMinor, 0n);
       expect(view.reserved.minor).toBe(sum);
       expect(view.reserved.minor).toBeLessThanOrEqual(1_000_000n);
@@ -192,16 +192,12 @@ describe('CapacityService (integration, real Postgres)', () => {
       await reserve('INV-A', '1.00');
       await reserve('INV-B', '2.00');
       await service.release('PRG-TEST', 'INV-A');
-      expect((await service.listReservations('PRG-TEST')).map((r) => r.invoiceId)).toEqual([
-        'INV-A',
-        'INV-B',
-      ]);
-      expect(
-        (await service.listReservations('PRG-TEST', 'ACTIVE')).map((r) => r.invoiceId),
-      ).toEqual(['INV-B']);
-      expect(
-        (await service.listReservations('PRG-TEST', 'RELEASED')).map((r) => r.invoiceId),
-      ).toEqual(['INV-A']);
+      const ids = async (status?: 'ACTIVE' | 'RELEASED') =>
+        (await service.listReservations('PRG-TEST', status)).reservations.map((r) => r.invoiceId);
+      expect(await ids()).toEqual(['INV-A', 'INV-B']);
+      expect(await ids('ACTIVE')).toEqual(['INV-B']);
+      expect(await ids('RELEASED')).toEqual(['INV-A']);
+      expect((await service.listReservations('PRG-TEST')).programCurrency).toBe('USD');
     });
   });
 

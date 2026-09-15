@@ -3,7 +3,16 @@
 // module also runs standalone (migrate.ts, unit tests), so import it here.
 import 'reflect-metadata';
 import { plainToInstance, Type } from 'class-transformer';
-import { IsIn, IsInt, IsNotEmpty, IsString, Max, Min, validateSync } from 'class-validator';
+import {
+  IsIn,
+  IsInt,
+  IsNotEmpty,
+  IsString,
+  Max,
+  Min,
+  MinLength,
+  validateSync,
+} from 'class-validator';
 
 /**
  * Typed, validated view of process.env.
@@ -38,6 +47,25 @@ export class EnvConfig {
   @IsString()
   @IsNotEmpty()
   FX_RATES!: string;
+
+  /** HS256 signing secret. Short secrets are refused at boot. */
+  @IsString()
+  @MinLength(16)
+  JWT_SECRET!: string;
+
+  /** Token lifetime as accepted by jsonwebtoken, e.g. "1h", "30m". */
+  @IsString()
+  @IsNotEmpty()
+  JWT_EXPIRES_IN: string = '1h';
+
+  /** Client credentials accepted by POST /auth/token. */
+  @IsString()
+  @IsNotEmpty()
+  API_CLIENT_ID!: string;
+
+  @IsString()
+  @MinLength(16)
+  API_CLIENT_SECRET!: string;
 }
 
 export function validateEnv(raw: Record<string, unknown>): EnvConfig {
