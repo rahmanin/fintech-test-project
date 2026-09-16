@@ -8,7 +8,7 @@ const config: Config = {
   rootDir: '.',
   testRegex: '.*\\.(int|e2e)-spec\\.ts$',
   moduleFileExtensions: ['js', 'json', 'ts'],
-  setupFiles: ['<rootDir>/setup-env.ts'],
+  setupFiles: ['reflect-metadata', '<rootDir>/setup-env.ts'],
   testTimeout: 30000,
 };
 

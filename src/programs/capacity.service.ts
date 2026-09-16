@@ -8,6 +8,7 @@ import {
   AmountTooSmallError,
   IdempotencyConflictError,
   InsufficientCapacityError,
+  ProgramCurrencyMismatchError,
   ProgramNotFoundError,
   ReservationNotFoundError,
 } from './programs.errors';
@@ -40,6 +41,17 @@ export interface ReservationList {
   programCurrency: string;
   reservations: ReservationEntity[];
 }
+
+/** One program's absolute capacity state from treasury. */
+export interface TreasuryCapacityEntry {
+  programId: string;
+  version: bigint;
+  currency: string;
+  /** Decimal string in the program currency. */
+  totalLimit: string;
+}
+
+export type TreasuryApplyOutcome = 'CREATED' | 'UPDATED' | 'SKIPPED_STALE';
 
 export interface ProgramView {
   id: string;
@@ -207,6 +219,74 @@ export class CapacityService {
       order: { createdAt: 'ASC', invoiceId: 'ASC' },
     });
     return { programCurrency: program.currency, reservations };
+  }
+
+  /**
+   * Apply one program's absolute capacity state from treasury.
+   *
+   * Both message types (a single update and one entry of a bulk snapshot)
+   * carry absolute state, so one handler serves both. Each entry runs in its
+   * own transaction: a bad or failing entry must not roll back the good ones,
+   * and one transaction over a whole batch would hold locks on every program
+   * in it, blocking API reservations on unrelated programs.
+   *
+   * Reservations are never read or written here. Availability is derived at
+   * read time, so a limit change needs nothing recomputed.
+   */
+  async applyTreasuryCapacity(entry: TreasuryCapacityEntry): Promise<TreasuryApplyOutcome> {
+    const limit = Money.parse(entry.totalLimit, entry.currency);
+
+    return this.dataSource.transaction(async (manager) => {
+      // Upsert first, THEN lock. SELECT ... FOR UPDATE cannot lock a row that
+      // does not exist, so two concurrent entries for a brand-new program
+      // (a snapshot and an update from different partitions, or one message
+      // redelivered to two consumers) would both see "missing" and both
+      // insert; the loser would hit the primary key and surface as an error
+      // for an entirely expected situation. With ON CONFLICT DO NOTHING
+      // Postgres waits for the concurrent uncommitted insert: the winner
+      // creates the row, the loser sees it and continues below as if the
+      // program had always existed.
+      const inserted = await manager
+        .createQueryBuilder()
+        .insert()
+        .into(ProgramEntity)
+        .values({
+          id: entry.programId,
+          currency: entry.currency,
+          totalLimitMinor: limit.minor,
+          treasuryVersion: entry.version,
+        })
+        .orIgnore()
+        .returning('id')
+        .execute();
+      // RETURNING yields a row only when the insert actually happened, so an
+      // empty `raw` means the row already existed. `identifiers` must NOT be
+      // used here: TypeORM echoes back the values that were passed in, so it
+      // is non-empty even when ON CONFLICT DO NOTHING skipped the insert,
+      // which would make every update look like a fresh creation.
+      if ((inserted.raw as unknown[]).length > 0) return 'CREATED';
+
+      const program = await this.lockProgram(manager, entry.programId);
+
+      // One check rejects both duplicate deliveries and stale/out-of-order
+      // messages. It is correct only because the payload is absolute state:
+      // re-applying a version we already hold would be a no-op anyway.
+      if (entry.version <= program.treasuryVersion) return 'SKIPPED_STALE';
+
+      // Existing reservations are stored in the program's currency; changing
+      // it would make their converted amounts meaningless. TASK.md describes
+      // no such scenario, so this is refused rather than guessed at.
+      if (program.currency !== entry.currency) {
+        throw new ProgramCurrencyMismatchError(entry.programId, program.currency, entry.currency);
+      }
+
+      await manager.update(
+        ProgramEntity,
+        { id: entry.programId },
+        { totalLimitMinor: limit.minor, treasuryVersion: entry.version },
+      );
+      return 'UPDATED';
+    });
   }
 
   /** SELECT ... FOR UPDATE on the program row; the serialisation point for all writers. */
