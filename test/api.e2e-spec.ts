@@ -177,6 +177,38 @@ describe('HTTP API (e2e)', () => {
       expect(active.body.items).toEqual([]);
     });
 
+    it('reports in the response whether this call changed anything', async () => {
+      // The body is identical on a replay, so the header is the only signal a
+      // client (or a reviewer clicking twice) has that nothing happened.
+      const created = await reserve('INV-1', '100.00').expect(201);
+      expect(created.headers['idempotent-replay']).toBe('false');
+
+      const replay = await reserve('INV-1', '100.00').expect(200);
+      expect(replay.headers['idempotent-replay']).toBe('true');
+      expect(replay.body).toEqual(created.body);
+
+      const release = () =>
+        api().post('/api/v1/programs/PRG-TEST/reservations/INV-1/release').set(auth());
+
+      const released = await release().expect(200);
+      expect(released.headers['idempotent-replay']).toBe('false');
+
+      const releasedAgain = await release().expect(200);
+      expect(releasedAgain.headers['idempotent-replay']).toBe('true');
+      expect(releasedAgain.body).toEqual(released.body);
+
+      // A replayed reserve after the release is still a replay, not a new reservation.
+      const afterRelease = await reserve('INV-1', '100.00').expect(200);
+      expect(afterRelease.headers['idempotent-replay']).toBe('true');
+      expect(afterRelease.body.status).toBe('RELEASED');
+    });
+
+    it('does not mark a conflicting repeat as a replay', async () => {
+      await reserve('INV-1', '100.00').expect(201);
+      const conflict = await reserve('INV-1', '200.00').expect(409);
+      expect(conflict.headers['idempotent-replay']).toBeUndefined();
+    });
+
     it('404 for unknown program and unknown reservation', async () => {
       const p = await api().get('/api/v1/programs/NOPE').set(auth()).expect(404);
       expect(p.body).toMatchObject({ code: 'PROGRAM_NOT_FOUND', details: { programId: 'NOPE' } });

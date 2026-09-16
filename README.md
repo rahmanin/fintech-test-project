@@ -68,6 +68,20 @@ curl -s -X POST -H "Authorization: Bearer $TOKEN" $B/programs/PRG-DEMO/reservati
 curl -s -H "Authorization: Bearer $TOKEN" "$B/programs/PRG-DEMO/reservations?status=RELEASED"
 ```
 
+### Telling a first call from a repeat
+
+Reserve and release are idempotent: repeating them returns the same body as
+the original call. Because the body is identical, every response carries an
+`Idempotent-Replay` header saying what *this* call did.
+
+| Call | Status | `Idempotent-Replay` |
+|------|--------|---------------------|
+| Reserve an invoice for the first time | 201 | `false` |
+| Repeat the same reserve | 200 | `true` |
+| Repeat with a different amount | 409 | absent, it is a conflict, not a replay |
+| Release for the first time | 200 | `false` |
+| Repeat the release | 200 | `true` |
+
 Errors always have the shape `{ "code": "...", "message": "...", "details": {...} }`.
 
 ## Treasury capacity feed (Kafka)
