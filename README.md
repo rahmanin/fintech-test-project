@@ -70,17 +70,39 @@ curl -s -H "Authorization: Bearer $TOKEN" "$B/programs/PRG-DEMO/reservations?sta
 
 ### Telling a first call from a repeat
 
-Reserve and release are idempotent: repeating them returns the same body as
-the original call. Because the body is identical, every response carries an
-`Idempotent-Replay` header saying what *this* call did.
+Reserve and release are idempotent: repeating either returns the same
+reservation as the original call. So that a retry is never mistaken for a
+first-time success, every response says what *this* call did, in `outcome`,
+the first field of the body:
 
-| Call | Status | `Idempotent-Replay` |
-|------|--------|---------------------|
-| Reserve an invoice for the first time | 201 | `false` |
-| Repeat the same reserve | 200 | `true` |
-| Repeat with a different amount | 409 | absent, it is a conflict, not a replay |
-| Release for the first time | 200 | `false` |
-| Repeat the release | 200 | `true` |
+```json
+{
+  "outcome": "ALREADY_RESERVED",
+  "programId": "PRG-DEMO",
+  "invoiceId": "INV-1001",
+  "reservedAmount": "1080.00"
+}
+```
+
+| Call | Status | `outcome` | `Idempotent-Replay` |
+|------|--------|-----------|---------------------|
+| Reserve an invoice for the first time | 201 | `CREATED` | `false` |
+| Repeat the same reserve | 200 | `ALREADY_RESERVED` | `true` |
+| Repeat with a different amount | 409 | absent | absent |
+| Release for the first time | 200 | `RELEASED` | `false` |
+| Repeat the release | 200 | `ALREADY_RELEASED` | `true` |
+
+A repeat stays a **2xx**: the caller asked for the invoice to be reserved and
+it is reserved, so a retry after a lost response must look like the success
+it is. Returning 4xx would make a client that retries on timeout treat a
+correct outcome as a failure. The full body is returned for the same reason:
+a client that lost the first response gets the amount and the frozen rate
+without a second call.
+
+A repeat with a *different* amount is not a replay but a client bug, so it
+stays `409 IDEMPOTENCY_CONFLICT` with no outcome. The header duplicates the
+signal for machine clients that read only metadata; list items carry no
+`outcome`, since no call outcome applies to them.
 
 Errors always have the shape `{ "code": "...", "message": "...", "details": {...} }`.
 

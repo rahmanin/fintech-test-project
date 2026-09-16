@@ -30,21 +30,22 @@ export class ProgramsController {
 
   /**
    * 201 when a reservation is created, 200 when the same request is replayed.
-   * The body is identical either way, so the outcome of this particular call
-   * is also reported in the Idempotent-Replay header.
+   * The reservation itself is identical either way, so what this call did is
+   * reported explicitly: `outcome` as the first field of the body, and the
+   * Idempotent-Replay header for clients that only read metadata.
    */
   @Post(':programId/reservations')
   @ApiOperation({ summary: 'Reserve capacity for an approved invoice' })
   @ApiParam({ name: 'programId', example: 'PRG-DEMO' })
   @ApiResponse({
     status: 201,
-    description: 'Created',
+    description: 'Created; outcome = CREATED',
     type: ReservationResponseDto,
     headers: IDEMPOTENT_REPLAY_HEADER_DOC,
   })
   @ApiResponse({
     status: 200,
-    description: 'Already reserved (idempotent replay)',
+    description: 'Already reserved (idempotent replay); outcome = ALREADY_RESERVED',
     type: ReservationResponseDto,
     headers: IDEMPOTENT_REPLAY_HEADER_DOC,
   })
@@ -72,7 +73,11 @@ export class ProgramsController {
     const result = await this.capacity.reserve({ programId, ...body });
     res.status(result.created ? 201 : 200);
     setIdempotentReplay(res, !result.created);
-    return ReservationResponseDto.from(result.reservation, result.programCurrency);
+    return ReservationResponseDto.withOutcome(
+      result.created ? 'CREATED' : 'ALREADY_RESERVED',
+      result.reservation,
+      result.programCurrency,
+    );
   }
 
   @Post(':programId/reservations/:invoiceId/release')
@@ -84,7 +89,7 @@ export class ProgramsController {
     status: 200,
     description:
       'Released. The status is 200 whether this call performed the release or ' +
-      'repeated one that already happened; see the Idempotent-Replay header.',
+      'repeated one that already happened; outcome is RELEASED or ALREADY_RELEASED.',
     type: ReservationResponseDto,
     headers: IDEMPOTENT_REPLAY_HEADER_DOC,
   })
@@ -96,7 +101,11 @@ export class ProgramsController {
   ): Promise<ReservationResponseDto> {
     const result = await this.capacity.release(programId, invoiceId);
     setIdempotentReplay(res, !result.changed);
-    return ReservationResponseDto.from(result.reservation, result.programCurrency);
+    return ReservationResponseDto.withOutcome(
+      result.changed ? 'RELEASED' : 'ALREADY_RELEASED',
+      result.reservation,
+      result.programCurrency,
+    );
   }
 
   @Get(':programId/reservations')
